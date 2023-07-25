@@ -1,0 +1,12 @@
+[
+{
+  "directory": "/root/workspace/sylar/build",
+  "command": "/usr/bin/g++ -Dsylar_EXPORTS   -rdynamic -O3 -g -std=c++11 -Wall -Wno-deprecated -Werror -Wno-unused-function -g -fPIC -o CMakeFiles/sylar.dir/sylar/log.cpp.o -c /root/workspace/sylar/sylar/log.cpp",
+  "file": "/root/workspace/sylar/sylar/log.cpp"
+},
+{
+  "directory": "/root/workspace/sylar/build",
+  "command": "/usr/bin/g++    -rdynamic -O3 -g -std=c++11 -Wall -Wno-deprecated -Werror -Wno-unused-function -g -o CMakeFiles/test.dir/tests/test.cpp.o -c /root/workspace/sylar/tests/test.cpp",
+  "file": "/root/workspace/sylar/tests/test.cpp"
+}
+]
