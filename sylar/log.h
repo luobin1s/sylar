@@ -82,7 +82,7 @@ class LogAppender {
   virtual ~LogAppender(){};
 
  protected:
-  LogLevel ::Level m_level;
+  LogLevel ::Level m_level = LogLevel::DEBUG;
   LogFormatter::ptr m_formatter;
 };
 
