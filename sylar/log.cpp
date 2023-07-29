@@ -1,9 +1,8 @@
 #include "log.h"
+
+#include <ctime>
 #include <functional>
 #include <map>
-#ifdef WIN32
-
-#endif
 namespace sylar {
 const char *LogLevel::ToString(LogLevel::Level level) {
   switch (level) {
@@ -68,9 +67,9 @@ class ThreadIdFormatItem : public LogFormatter::FormatItem {
   }
 };
 
-class FiberFormatItem : public LogFormatter::FormatItem {
+class FiberIdFormatItem : public LogFormatter::FormatItem {
  public:
-  FiberFormatItem(const std::string &str = "") {}
+  FiberIdFormatItem(const std::string &str = "") {}
   void format(std::ostream &os, std::shared_ptr<Logger> logger,
               LogLevel::Level level, LogEvent::ptr event) override {
     os << event->getFiber();
@@ -83,7 +82,12 @@ class DateTimeFormatItem : public LogFormatter::FormatItem {
       : m_format(format) {}
   void format(std::ostream &os, std::shared_ptr<Logger> logger,
               LogLevel::Level level, LogEvent::ptr event) override {
-    os << event->getTime();
+    struct tm tm;
+    time_t time = event->getTime();
+    localtime_r(&time, &tm);
+    char buff[64];
+    strftime(buff, sizeof(buff), m_format.c_str(), &tm);
+    os << buff;
   }
 
  private:
@@ -132,6 +136,18 @@ class StringFormatItem : public LogFormatter::FormatItem {
   std::string m_string;
 };
 
+class TabFormatItem : public LogFormatter::FormatItem {
+ public:
+  TabFormatItem(const std::string &str = "") {}
+  void format(std::ostream &os, std::shared_ptr<Logger> logger,
+              LogLevel::Level level, LogEvent::ptr event) override {
+    os << "\t";
+  }
+
+ private:
+  std::string m_string;
+};
+
 void Logger::addAppender(LogAppender::ptr appender) {
   if (!appender->getFormatter()) {
     appender->setFormatter(m_formatter);
@@ -150,7 +166,8 @@ void Logger::delAppender(LogAppender::ptr appender) {
 
 Logger::Logger(const std::string &name)
     : m_name(name), m_level(LogLevel::DEBUG) {
-  m_formatter.reset(new LogFormatter("%d [%p] <%f:%l> %m %n"));
+  m_formatter.reset(new LogFormatter(
+      "%d{%Y-%m-%d %H:%M:%S}%T%t%T%F%T[%p]%T[%c]%T%f:%l%T%m%n"));
 }
 
 void Logger::log(LogLevel::Level level, LogEvent::ptr event) {
@@ -210,129 +227,138 @@ std::string LogFormatter::format(std::shared_ptr<Logger> logger,
   return ss.str();
 }
 
-//%xxx %xxx{xxx} %%
+//("%d{%Y-%m-%d %H:%M:%S}%T%t%T%F%T[%p]%T[%c]%T%f:%l%T%m%n")
 void LogFormatter::init() {
-    //str, format, type
-    std::vector<std::tuple<std::string, std::string, int> > vec;
-    std::string nstr;
-    for(size_t i = 0; i < m_pattern.size(); ++i) {
-        if(m_pattern[i] != '%') {
-            nstr.append(1, m_pattern[i]);
-            continue;
-        }
-
-        if((i + 1) < m_pattern.size()) {
-            if(m_pattern[i + 1] == '%') {
-                nstr.append(1, '%');
-                continue;
-            }
-        }
-
-        size_t n = i + 1;
-        int fmt_status = 0;
-        size_t fmt_begin = 0;
-
-        std::string str;
-        std::string fmt;
-        while(n < m_pattern.size()) {
-            if(!fmt_status && (!isalpha(m_pattern[n]) && m_pattern[n] != '{'
-                    && m_pattern[n] != '}')) {
-                //str = m_pattern.substr(i + 1, n - i - 1);
-                break;
-            }
-            if(fmt_status == 0) {
-                if(m_pattern[n] == '{') {
-                    str = m_pattern.substr(i + 1, n - i - 1);
-                    //std::cout << "*" << str << std::endl;
-                    fmt_status = 1; //解析格式
-                    fmt_begin = n;
-                    ++n;
-                    continue;
-                }
-            } else if(fmt_status == 1) {
-                if(m_pattern[n] == '}') {
-                    fmt = m_pattern.substr(fmt_begin + 1, n - fmt_begin - 1);
-                    //std::cout << "#" << fmt << std::endl;
-                    fmt_status = 2;
-                    break;
-                }
-            }
-            ++n;
-            // if(n == m_pattern.size()) {
-            //     if(str.empty()) {
-            //         str = m_pattern.substr(i + 1);
-            //     }
-            // }
-        }
-
-        if(fmt_status == 0) {
-            if(!nstr.empty()) {
-                vec.push_back(std::make_tuple(nstr, std::string(), 0));
-                nstr.clear();
-            }
-            str = m_pattern.substr(i + 1,n-i-1);
-            vec.push_back(std::make_tuple(str, fmt, 1));
-            i = n - 1;
-        } else if(fmt_status == 1) {
-            std::cout << "pattern parse error: " << m_pattern << " - " << m_pattern.substr(i) << std::endl;
-            vec.push_back(std::make_tuple("<<pattern_error>>", fmt, 0));
-        }else if(fmt_status == 2) {
-            if(!nstr.empty()) {
-                vec.push_back(std::make_tuple(nstr, std::string(), 0));
-                nstr.clear();
-            }
-            vec.push_back(std::make_tuple(str, fmt, 1));
-            i = n - 1;
-        } 
+  // str, format, type
+  std::vector<std::tuple<std::string, std::string, int> > vec;
+  std::string nstr;
+  for (size_t i = 0; i < m_pattern.size(); ++i) {
+    if (m_pattern[i] != '%') {
+      nstr.append(1, m_pattern[i]);
+      continue;
     }
 
-    if(!nstr.empty()) {
-        vec.push_back(std::make_tuple(nstr, "", 0));
+    if ((i + 1) < m_pattern.size()) {
+      if (m_pattern[i + 1] == '%') {
+        nstr.append(1, '%');
+        continue;
+      }
     }
-    static std::map<std::string, std::function<FormatItem::ptr(const std::string& str)> > s_format_items = {
-#define XX(str, C) \
-        {#str, [](const std::string& fmt) { return FormatItem::ptr(new C(fmt));}}
 
-        XX(m, MessageFormatItem),
-        XX(p, LevelFormatItem),
-        XX(r, ElapseFormatItem),
-        XX(c, NameFormatItem),
-        XX(t, ThreadIdFormatItem),
-        XX(n, NewLineFormatItem),
-        XX(d, DateTimeFormatItem),
-        XX(f, FileNameFormatItem),
-        XX(l, LineFormatItem),
-   //     XX(T, TabFormatItem),
-   //     XX(F, FiberFormatItem),
+    size_t n = i + 1;
+    int fmt_status = 0;
+    size_t fmt_begin = 0;
+
+    std::string str;
+    std::string fmt;
+    while (n < m_pattern.size()) {
+      if (!fmt_status && (!isalpha(m_pattern[n]) && m_pattern[n] != '{' &&
+                          m_pattern[n] != '}')) {
+        str = m_pattern.substr(i + 1, n - i - 1);
+        break;
+      }
+      if (fmt_status == 0) {
+        if (m_pattern[n] == '{') {
+          str = m_pattern.substr(i + 1, n - i - 1);
+          // std::cout << "*" << str << std::endl;
+          fmt_status = 1;  // 解析格式
+          fmt_begin = n;
+          ++n;
+          continue;
+        }
+      } else if (fmt_status == 1) {
+        if (m_pattern[n] == '}') {
+          fmt = m_pattern.substr(fmt_begin + 1, n - fmt_begin - 1);
+          // std::cout << "#" << fmt << std::endl;
+          fmt_status = 0;
+          ++n;
+          break;
+        }
+      }
+      ++n;
+      if (n == m_pattern.size()) {
+        if (str.empty()) {
+          str = m_pattern.substr(i + 1);
+        }
+      }
+    }
+
+    if (fmt_status == 0) {
+      if (!nstr.empty()) {
+        vec.push_back(std::make_tuple(nstr, std::string(), 0));
+        nstr.clear();
+      }
+      vec.push_back(std::make_tuple(str, fmt, 1));
+      i = n - 1;
+    } else if (fmt_status == 1) {
+      std::cout << "pattern parse error: " << m_pattern << " - "
+                << m_pattern.substr(i) << std::endl;
+      vec.push_back(std::make_tuple("<<pattern_error>>", fmt, 0));
+    }
+  }
+
+  if (!nstr.empty()) {
+    vec.push_back(std::make_tuple(nstr, "", 0));
+  }
+  static std::map<std::string,
+                  std::function<FormatItem::ptr(const std::string &str)> >
+      s_format_items = {
+#define XX(str, C)                                                           \
+  {                                                                          \
+    #str, [](const std::string &fmt) { return FormatItem::ptr(new C(fmt)); } \
+  }
+
+          XX(m, MessageFormatItem),  XX(p, LevelFormatItem),
+          XX(r, ElapseFormatItem),   XX(c, NameFormatItem),
+          XX(t, ThreadIdFormatItem), XX(n, NewLineFormatItem),
+          XX(d, DateTimeFormatItem), XX(f, FileNameFormatItem),
+          XX(l, LineFormatItem),     XX(T, TabFormatItem),
+          XX(F, FiberIdFormatItem),
 #undef XX
-    };
+      };
 
-    for(auto& i : vec) {
-        if(std::get<2>(i) == 0) {
-            m_items.push_back(FormatItem::ptr(new StringFormatItem(std::get<0>(i))));
-        } else {
-            auto it = s_format_items.find(std::get<0>(i));
-            if(it == s_format_items.end()) {
-                m_items.push_back(FormatItem::ptr(new StringFormatItem("<<error_format %" + std::get<0>(i) + ">>")));
-            } else {
-                m_items.push_back(it->second(std::get<1>(i)));
-            }
-        }
-
-        std::cout << "(" << std::get<0>(i) << ") - (" << std::get<1>(i) << ") - (" << std::get<2>(i) << ")" << std::endl;
+  for (auto &i : vec) {
+    if (std::get<2>(i) == 0) {
+      m_items.push_back(FormatItem::ptr(new StringFormatItem(std::get<0>(i))));
+    } else {
+      auto it = s_format_items.find(std::get<0>(i));
+      if (it == s_format_items.end()) {
+        m_items.push_back(FormatItem::ptr(
+            new StringFormatItem("<<error_format %" + std::get<0>(i) + ">>")));
+      } else {
+        m_items.push_back(it->second(std::get<1>(i)));
+      }
     }
-    std::cout << m_items.size() << std::endl;
+
+    std::cout << "(" << std::get<0>(i) << ") - (" << std::get<1>(i) << ") - ("
+              << std::get<2>(i) << ")" << std::endl;
+  }
+  std::cout << m_items.size() << std::endl;
 }
 
-LogEvent::LogEvent(const char *file, int32_t line, uint32_t elapse,
-                   uint32_t thread_id, uint32_t fiber_id, uint64_t time)
+LogEvent::LogEvent(Logger::ptr logger, LogLevel::Level level, const char *file,
+                   int32_t line, uint32_t elapse, uint32_t thread_id,
+                   uint32_t fiber_id, uint64_t time)
     : m_file(file),
       m_line(line),
       m_elapse(elapse),
       m_threadId(thread_id),
       m_fiberId(fiber_id),
-      m_time(time) {}
+      m_time(time),
+      m_logger(logger),
+      m_level(level) {}
+
+LogEvent::~LogEvent() {}
+
+LogEventWrap::LogEventWrap(LogEvent::ptr e) : m_event(e) {}
+
+LogEventWrap::~LogEventWrap() {
+  m_event->getLogger()->log(m_event->getLevel(), m_event);
+}
+
+std::stringstream &LogEventWrap::getSS() {
+  // TODO: insert return statement here
+  return m_event->getSS();
+}
 
 }  // namespace sylar
-
-
