@@ -2,7 +2,6 @@
 
 #include <ctime>
 #include <functional>
-#include <map>
 namespace sylar {
 const char *LogLevel::ToString(LogLevel::Level level) {
   switch (level) {
@@ -190,7 +189,9 @@ void Logger::error(LogEvent::ptr event) { log(LogLevel::ERROR, event); }
 void Logger::fatal(LogEvent::ptr event) { log(LogLevel::FATAL, event); }
 
 FileLogAppender::FileLogAppender(const std::string &filename)
-    : m_filename(filename) {}
+    : m_filename(filename) {
+  reopen();
+}
 
 void FileLogAppender::log(std::shared_ptr<Logger> logger, LogLevel::Level level,
                           LogEvent::ptr event) {
@@ -350,6 +351,22 @@ LogEvent::LogEvent(Logger::ptr logger, LogLevel::Level level, const char *file,
 
 LogEvent::~LogEvent() {}
 
+void LogEvent::format(const char *fmt, ...) {
+  va_list al;
+  va_start(al, fmt);
+  format(fmt, al);
+  va_end(al);
+}
+
+void LogEvent::format(const char *fmt, va_list al) {
+  char *buf = nullptr;
+  int len = vasprintf(&buf, fmt, al);
+  if (len != -1) {
+    m_ss << std::string(buf, len);
+    free(buf);
+  }
+}
+
 LogEventWrap::LogEventWrap(LogEvent::ptr e) : m_event(e) {}
 
 LogEventWrap::~LogEventWrap() {
@@ -360,5 +377,17 @@ std::stringstream &LogEventWrap::getSS() {
   // TODO: insert return statement here
   return m_event->getSS();
 }
+
+LoggerManger::LoggerManger() {
+  m_root.reset(new Logger);
+  m_root->addAppender(LogAppender::ptr(new StdoutLogAppender))
+}
+
+Logger::ptr LoggerManger::getLogger(const std::string &name) {
+  auto it = m_loggers.find(name);
+  return it == m_loggers.end() ? m_root: it->second;
+}
+
+void LoggerManger::init() {}
 
 }  // namespace sylar
