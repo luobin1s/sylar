@@ -9,6 +9,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "singleton.h"
 #define SYLAR_LOG_LEVEL(logger, level)                                \
   if (logger->getLevel() <= level)                                    \
   sylar::LogEventWrap(                                                \
@@ -17,7 +19,7 @@
           sylar::GetFiberId(), time(0))))                             \
       .getSS()
 #define SYLAR_LOG_DEBUG(logger) SYLAR_LOG_LEVEL(logger, sylar::LogLevel::DEBUG)
-#define SYLAR_LOG_INFO (logger) SYLAR_LOG_LEVEL(logger, sylar::LogLevel::INFO)
+#define SYLAR_LOG_INFO(logger) SYLAR_LOG_LEVEL(logger, sylar::LogLevel::INFO)
 #define SYLAR_LOG_WARN(logger) SYLAR_LOG_LEVEL(logger, sylar::LogLevel::WARN)
 #define SYLAR_LOG_ERROR(logger) SYLAR_LOG_LEVEL(logger, sylar::LogLevel::ERROR)
 #define SYLAR_LOG_FATAL(logger) SYLAR_LOG_LEVEL(logger, sylar::LogLevel::FATAL)
@@ -200,5 +202,7 @@ class LoggerManger {
   std::map<std::string, Logger::ptr> m_loggers;
   Logger::ptr m_root;
 };
+
+typedef sylar::Singleton<LoggerManger> loggerMgr;
 
 }  // namespace sylar

@@ -18,6 +18,8 @@ int main(int argc, char const *argv[]) {
   // logger->log(sylar::LogLevel::DEBUG,event);
   SYLAR_LOG_DEBUG(logger) << "test macro";
   SYLAR_LOG_ERROR(logger) << "test macro";
-  SYLAR_LOG_FMT_ERROR(logger, "test macro fmt error %s", "aa");
+  //SYLAR_LOG_FMT_ERROR(logger, "test macro fmt error %s", "aa");
+  auto log = sylar::loggerMgr::GetInstance()->getLogger("xx");
+  SYLAR_LOG_INFO(log) << "xxx";
   return 0;
 }
